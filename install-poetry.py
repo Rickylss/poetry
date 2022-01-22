@@ -284,7 +284,7 @@ class VirtualEnvironment:
         return self._path
 
     @classmethod
-    def make(cls, target: Path) -> "VirtualEnvironment":
+    def make(cls, target: Path, index_url: None) -> "VirtualEnvironment":
         try:
             import venv
 
@@ -316,6 +316,7 @@ class VirtualEnvironment:
 
         # we do this here to ensure that outdated system default pip does not trigger
         # older bugs
+        env.pip("config", "set", "global.index-url", index_url)
         env.pip("install", "--disable-pip-version-check", "--upgrade", "pip")
 
         return env
@@ -450,6 +451,7 @@ class Installer:
         accept_all: bool = False,
         git: Optional[str] = None,
         path: Optional[str] = None,
+        index_url: Optional[str] = None,
     ) -> None:
         self._version = version
         self._preview = preview
@@ -460,6 +462,7 @@ class Installer:
         self._data_dir = data_dir()
         self._bin_dir = bin_dir()
         self._cursor = Cursor()
+        self._index_url = index_url 
 
     def allows_prereleases(self) -> bool:
         return self._preview
@@ -525,7 +528,7 @@ class Installer:
             )
         )
 
-        with self.make_env(version) as env:
+        with self.make_env(version, self._index_url) as env:
             self.install_poetry(version, env)
             self.make_bin(version, env)
             self._data_dir.joinpath("VERSION").write_text(version)
@@ -571,7 +574,7 @@ class Installer:
         )
 
     @contextmanager
-    def make_env(self, version: str) -> VirtualEnvironment:
+    def make_env(self, version: str, index_url: str) -> VirtualEnvironment:
         env_path = self._data_dir.joinpath("venv")
         env_path_saved = env_path.with_suffix(".save")
 
@@ -583,7 +586,7 @@ class Installer:
 
         try:
             self._install_comment(version, "Creating environment")
-            yield VirtualEnvironment.make(env_path)
+            yield VirtualEnvironment.make(env_path, index_url)
         except Exception as e:
             if env_path.exists():
                 self._install_comment(
@@ -855,7 +858,13 @@ def main():
             "of Poetry available online."
         ),
     )
-
+    parser.add_argument(
+        "-i",
+        "--index-url",
+        help="set python package index url",
+        dest="index_url",
+        action="store",
+    )
     args = parser.parse_args()
 
     installer = Installer(
